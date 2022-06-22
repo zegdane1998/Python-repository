@@ -13,7 +13,7 @@ inputs:
   json:
     description: "Output a snyk.json file with results if running the test command"
     default: false
-runs:
+runs-on:
   using: "docker"
   image: "docker://snyk/snyk:python"
   env:
