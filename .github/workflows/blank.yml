@@ -1,36 +1,60 @@
-# This is a basic workflow to help you get started with Actions
+name: ZAP-Test
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  push
+    
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+jobs: 
+  build: 
+    runs-on: ubuntu-18.04
+    steps: 
+      - uses: actions/checkout@v2
+      - name: Setup Python 3.7.9
+        uses: actions/setup-python@v1
+        with: 
+          python-version: 3.7.9
+      - name: Install python deps
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          python -m pip install --upgrade pip
+          pip install requests python-owasp-zap-v2.4
+      - name: Get working directory
+        run: echo $(PWD)
+      - name: Build Image
+        run: docker build -t vulnerable-app .
+      - name: Install OWASP ZAP
+        run: |
+          mkdir -p ./zap
+          cd ./zap
+          wget -N https://github.com/zaproxy/zaproxy/releases/download/v2.9.0/ZAP_2.9.0_Linux.tar.gz
+          tar -zxvf ZAP_2.9.0_Linux.tar.gz
+          rm ZAP_2.9.0_Linux.tar.gz
+          cd ZAP_2.9.0/plugin
+          wget https://github.com/zaproxy/zap-extensions/releases/download/exportreport-v6/exportreport-alpha-6.zap
+          echo 'export PATH_ZAP_SH=./zap/ZAP_2.9.0/zap.sh' >> ~/.bashrc
+          echo 'export ZAP_PORT=8090' >> ~/.bashrc
+          echo 'sh -c "$PATH_ZAP_SH -daemon -host 0.0.0.0 -port $ZAP_PORT -configfile ./zap/ZAP_2.9.0/conf" > /dev/null & ' > start-zap
+          echo 'sleep 40' >> start-zap
+          echo 'sh -c "$PATH_ZAP_SH -host 0.0.0.0 -port $ZAP_PORT -configfile ./zap/ZAP_2.9.0/conf" > /dev/null & ' > start-gui-zap
+          echo 'sleep 40' >> start-gui-zap
+          echo 'pkill -f zap' > stop-zap
+          chmod +x start-zap
+          chmod +x start-gui-zap
+          chmod +x stop-zap
+          echo $pwd
+      - name: Run Docker Container
+        run: docker run -d -p 5050:5050 vulnerable-app
+      - name: Run ZAP Daemon
+        run: ./zap/ZAP_2.9.0/zap.sh -daemon -host 0.0.0.0 -port 8090 -config api.addrs.addr.name=".*" -config api.addrs.addr.regex=true -config api.disablekey=true > /dev/null &
+      - name: Sleep for a bit
+        uses: jakejarvis/wait-action@master
+        with:
+          time: '20s'
+      - name: Run Test Automation with ZAP
+        run: |
+          cd ./tests/
+          python e2e_zap.py
+      - name: "Upload Report"
+        uses: actions/upload-artifact@v1
+        with:
+          name: zap-scan-report
+          path: ./tests/zap-report.json
