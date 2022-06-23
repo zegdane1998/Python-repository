@@ -1,29 +1,35 @@
-name: "Snyk Python"
-on:
-  push:
-  pull_request: 
-description: "Check your Python application for vulnerabilties using Snyk"
-author: "Gareth Rushgrove"
-branding:
-  icon: "alert-triangle"
-  color: "yellow"
-inputs:
-  command:
-    description: "Which Snyk command to run, defaults to test"
-    default: test
-  args:
-    description: "Additional arguments to pass to Snyk"
-  json:
-    description: "Output a snyk.json file with results if running the test command"
-    default: false
-runs:
-  using: "docker"
-  image: "docker://snyk/snyk:python"
-  env:
-    FORCE_COLOR: 2
-    SNYK_INTEGRATION_NAME: GITHUB_ACTIONS
-    SNYK_INTEGRATION_VERSION: python
-  args:
-  - snyk
-  - ${{ inputs.command }}
-  - ${{ inputs.args }} 
+nom : Projet Java d'analyse CRDA
+sur :
+  pousser :
+  pull_request :
+
+emplois :
+  scanner :
+    name : Analyser le projet Java
+    fonctionne sur : ubuntu-latest
+
+    étapes :
+      - nom : Projet de paiement
+        utilise : actions/checkout@v2
+
+      - nom : Install CRDA cli
+        utilise : redhat-actions/openshift-tools-installer@v1
+        avec :
+          source : github
+          crda : latest
+
+      - nom : Configuration Java
+        utilise : actions/setup-java@v2
+        avec :
+          distribution : temurin
+          version java : 11
+      
+      - nom : CRDA Scanner et télécharger SARIF
+        identifiant : analyse
+        utilise : redhat-actions/crda@v1
+        avec :
+          snyk_token : ${{ secrets.SNYK_TOKEN }}
+        erreur continue : true  
+
+      - nom : Imprimer le lien du rapport
+        exécuter : echo ${{ étapes.scan.outputs.report_link }}
